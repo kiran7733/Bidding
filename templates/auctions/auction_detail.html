@@ -1,0 +1,108 @@
+{% extends 'base.html' %}
+
+{% block title %}{{ auction.title }} - Online Auction{% endblock %}
+
+{% block content %}
+<div class="row">
+    <div class="col-md-8">
+        <!-- Auction Image -->
+        {% if auction.image %}
+        <img src="{{ auction.image.url }}" class="img-fluid rounded mb-4" alt="{{ auction.title }}">
+        {% else %}
+        <div class="bg-light rounded mb-4 d-flex align-items-center justify-content-center" style="height: 400px;">
+            <i class="fas fa-image fa-5x text-muted"></i>
+        </div>
+        {% endif %}
+        
+        <!-- Auction Description -->
+        <div class="card">
+            <div class="card-header">
+                <h3>Description</h3>
+            </div>
+            <div class="card-body">
+                <p>{{ auction.description|linebreaks }}</p>
+            </div>
+        </div>
+    </div>
+    
+    <div class="col-md-4">
+        <!-- Auction Info Card -->
+        <div class="card mb-4">
+            <div class="card-header">
+                <h4>{{ auction.title }}</h4>
+            </div>
+            <div class="card-body">
+                <p><strong>Category:</strong> {{ auction.category.name }}</p>
+                <p><strong>Seller:</strong> {{ auction.seller.username }}</p>
+                <p><strong>Starting Price:</strong> ${{ auction.starting_price }}</p>
+                <h5 class="text-success">Current Bid: ${{ auction.current_price }}</h5>
+                
+                {% if auction.time_remaining %}
+                <div class="alert alert-warning">
+                    <i class="fas fa-clock"></i> 
+                    <strong>Time Remaining:</strong><br>
+                    {{ auction.time_remaining.days }} days remaining
+                </div>
+                {% else %}
+                <div class="alert alert-danger">
+                    <i class="fas fa-times-circle"></i> Auction Ended
+                </div>
+                {% endif %}
+            </div>
+        </div>
+        
+        <!-- Bidding Section -->
+        {% if user.is_authenticated and auction.is_active and user != auction.seller %}
+        <div class="card mb-4">
+            <div class="card-header">
+                <h5>Place Your Bid</h5>
+            </div>
+            <div class="card-body">
+                <form method="POST" action="{% url 'place_bid' auction.pk %}">
+                    {% csrf_token %}
+                    <div class="mb-3">
+                        <label for="id_amount" class="form-label">Bid Amount ($)</label>
+                        {{ bid_form.amount }}
+                        <div class="form-text">Minimum bid: ${{ auction.current_price|add:1 }}</div>
+                    </div>
+                    <button type="submit" class="btn btn-success w-100">
+                        <i class="fas fa-gavel"></i> Place Bid
+                    </button>
+                </form>
+            </div>
+        </div>
+        {% elif not user.is_authenticated %}
+        <div class="card mb-4">
+            <div class="card-body text-center">
+                <p>Please <a href="{% url 'login' %}">login</a> to place a bid.</p>
+            </div>
+        </div>
+        {% elif user == auction.seller %}
+        <div class="alert alert-info">
+            <i class="fas fa-info-circle"></i> This is your auction.
+        </div>
+        {% endif %}
+        
+        <!-- Recent Bids -->
+        <div class="card">
+            <div class="card-header">
+                <h5>Recent Bids</h5>
+            </div>
+            <div class="card-body">
+                {% if bids %}
+                {% for bid in bids %}
+                <div class="d-flex justify-content-between align-items-center mb-2">
+                    <span>{{ bid.bidder.username }}</span>
+                    <span class="fw-bold">${{ bid.amount }}</span>
+                </div>
+                <small class="text-muted">{{ bid.timestamp|timesince }} ago</small>
+                <hr>
+                {% endfor %}
+                {% else %}
+                <p class="text-muted">No bids yet. Be the first to bid!</p>
+                {% endif %}
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}

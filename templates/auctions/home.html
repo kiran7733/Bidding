@@ -1,0 +1,56 @@
+{% extends 'base.html' %}
+
+{% block title %}Home - Online Auction{% endblock %}
+
+{% block content %}
+<div class="jumbotron bg-light p-5 rounded mb-4">
+    <h1 class="display-4">Welcome to Our Auction Site</h1>
+    <p class="lead">Discover amazing items and place your bids on unique products.</p>
+    <a class="btn btn-primary btn-lg" href="{% url 'auction_list' %}" role="button">
+        <i class="fas fa-search"></i> Browse Auctions
+    </a>
+    {% if user.is_authenticated %}
+    <a class="btn btn-success btn-lg ms-2" href="{% url 'create_auction' %}" role="button">
+        <i class="fas fa-plus"></i> Create Auction
+    </a>
+    {% endif %}
+</div>
+
+<div class="row">
+    <div class="col-md-8">
+        <h2>Featured Auctions</h2>
+        <div class="row">
+            {% for auction in active_auctions %}
+            <div class="col-md-6 mb-4">
+                <div class="card">
+                    {% if auction.image %}
+                    <img src="{{ auction.image.url }}" class="card-img-top" style="height: 200px; object-fit: cover;">
+                    {% endif %}
+                    <div class="card-body">
+                        <h5 class="card-title">{{ auction.title }}</h5>
+                        <p class="card-text">{{ auction.description|truncatewords:15 }}</p>
+                        <p class="card-text">
+                            <strong>Current Bid: ${{ auction.current_price }}</strong>
+                        </p>
+                        <a href="{% url 'auction_detail' auction.pk %}" class="btn btn-primary">View Details</a>
+                    </div>
+                </div>
+            </div>
+            {% empty %}
+            <p>No active auctions at the moment.</p>
+            {% endfor %}
+        </div>
+    </div>
+    
+    <div class="col-md-4">
+        <h3>Categories</h3>
+        <div class="list-group">
+            {% for category in categories %}
+            <a href="{% url 'auction_list' %}?category={{ category.id }}" class="list-group-item list-group-item-action">
+                {{ category.name }}
+            </a>
+            {% endfor %}
+        </div>
+    </div>
+</div>
+{% endblock %}

@@ -1,0 +1,111 @@
+{% extends 'base.html' %}
+
+{% block title %}My Auctions - Online Auction{% endblock %}
+
+{% block content %}
+<h2>My Auctions</h2>
+
+<!-- Navigation Tabs -->
+<ul class="nav nav-tabs" id="myTab" role="tablist">
+    <li class="nav-item" role="presentation">
+        <button class="nav-link active" id="selling-tab" data-bs-toggle="tab" data-bs-target="#selling" type="button" role="tab">
+            <i class="fas fa-sell"></i> Items I'm Selling ({{ selling.count }})
+        </button>
+    </li>
+    <li class="nav-item" role="presentation">
+        <button class="nav-link" id="bidding-tab" data-bs-toggle="tab" data-bs-target="#bidding" type="button" role="tab">
+            <i class="fas fa-gavel"></i> Items I'm Bidding On ({{ bidding.count }})
+        </button>
+    </li>
+</ul>
+
+<div class="tab-content" id="myTabContent">
+    <!-- Selling Tab -->
+    <div class="tab-pane fade show active" id="selling" role="tabpanel">
+        <div class="row mt-4">
+            {% for auction in selling %}
+            <div class="col-md-6 mb-4">
+                <div class="card">
+                    {% if auction.image %}
+                    <img src="{{ auction.image.url }}" class="card-img-top" style="height: 200px; object-fit: cover;">
+                    {% endif %}
+                    <div class="card-body">
+                        <h5 class="card-title">{{ auction.title }}</h5>
+                        <p class="card-text">{{ auction.description|truncatewords:10 }}</p>
+                        <p class="card-text">
+                            <strong>Current Bid: ${{ auction.current_price }}</strong><br>
+                            <small class="text-muted">Starting Price: ${{ auction.starting_price }}</small>
+                        </p>
+                        
+                        {% if auction.status == 'active' %}
+                        <span class="badge bg-success">Active</span>
+                        {% else %}
+                        <span class="badge bg-secondary">{{ auction.get_status_display }}</span>
+                        {% endif %}
+                        
+                        {% if auction.time_remaining %}
+                        <p class="text-warning mt-2">
+                            <i class="fas fa-clock"></i> {{ auction.time_remaining.days }} days remaining
+                        </p>
+                        {% endif %}
+                        
+                        <a href="{% url 'auction_detail' auction.pk %}" class="btn btn-primary">View Details</a>
+                    </div>
+                </div>
+            </div>
+            {% empty %}
+            <div class="col-12">
+                <div class="alert alert-info text-center">
+                    <h4>No auctions created yet</h4>
+                    <p>Start selling your items by creating your first auction!</p>
+                    <a href="{% url 'create_auction' %}" class="btn btn-success">
+                        <i class="fas fa-plus"></i> Create Auction
+                    </a>
+                </div>
+            </div>
+            {% endfor %}
+        </div>
+    </div>
+    
+    <!-- Bidding Tab -->
+    <div class="tab-pane fade" id="bidding" role="tabpanel">
+        <div class="row mt-4">
+            {% for auction in bidding %}
+            <div class="col-md-6 mb-4">
+                <div class="card">
+                    {% if auction.image %}
+                    <img src="{{ auction.image.url }}" class="card-img-top" style="height: 200px; object-fit: cover;">
+                    {% endif %}
+                    <div class="card-body">
+                        <h5 class="card-title">{{ auction.title }}</h5>
+                        <p class="card-text">{{ auction.description|truncatewords:10 }}</p>
+                        <p class="card-text">
+                            <strong>Current Bid: ${{ auction.current_price }}</strong><br>
+                            <small class="text-muted">Seller: {{ auction.seller.username }}</small>
+                        </p>
+                        
+                        {% if auction.status == 'active' %}
+                        <span class="badge bg-success">Active</span>
+                        {% else %}
+                        <span class="badge bg-secondary">{{ auction.get_status_display }}</span>
+                        {% endif %}
+                        
+                        <a href="{% url 'auction_detail' auction.pk %}" class="btn btn-primary">View Details</a>
+                    </div>
+                </div>
+            </div>
+            {% empty %}
+            <div class="col-12">
+                <div class="alert alert-info text-center">
+                    <h4>No bids placed yet</h4>
+                    <p>Browse auctions and start bidding on items you like!</p>
+                    <a href="{% url 'auction_list' %}" class="btn btn-primary">
+                        <i class="fas fa-search"></i> Browse Auctions
+                    </a>
+                </div>
+            </div>
+            {% endfor %}
+        </div>
+    </div>
+</div>
+{% endblock %}
