@@ -13,7 +13,47 @@
             <div class="card-body">
                 <form method="POST" enctype="multipart/form-data">
                     {% csrf_token %}
-                    {{ form|crispy }}
+                    
+                    <div class="mb-3">
+                        <label for="{{ form.title.id_for_label }}" class="form-label">{{ form.title.label }}</label>
+                        {{ form.title }}
+                    </div>
+                    
+                    <div class="mb-3">
+                        <label for="{{ form.description.id_for_label }}" class="form-label">{{ form.description.label }}</label>
+                        {{ form.description }}
+                    </div>
+                    
+                    <div class="row">
+                        <div class="col-md-6">
+                            <div class="mb-3">
+                                <label for="{{ form.category.id_for_label }}" class="form-label">{{ form.category.label }}</label>
+                                {{ form.category }}
+                            </div>
+                        </div>
+                        <div class="col-md-6">
+                            <div class="mb-3">
+                                <label for="{{ form.starting_price.id_for_label }}" class="form-label">{{ form.starting_price.label }}</label>
+                                {{ form.starting_price }}
+                            </div>
+                        </div>
+                    </div>
+                    
+                    <div class="mb-3">
+                        <label for="{{ form.end_time.id_for_label }}" class="form-label">{{ form.end_time.label }}</label>
+                        {{ form.end_time }}
+                        <div class="form-text">
+                            <i class="fas fa-info-circle"></i> 
+                            Current time: <span id="current-time"></span> | 
+                            Set auction end time (must be at least 1 hour from now)
+                        </div>
+                    </div>
+                    
+                    <div class="mb-3">
+                        <label for="{{ form.image.id_for_label }}" class="form-label">{{ form.image.label }}</label>
+                        {{ form.image }}
+                    </div>
+                    
                     <div class="d-grid gap-2 d-md-flex justify-content-md-end">
                         <a href="{% url 'home' %}" class="btn btn-secondary me-md-2">Cancel</a>
                         <button type="submit" class="btn btn-success">
@@ -25,4 +65,38 @@
         </div>
     </div>
 </div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+// Display current time to help with end time selection
+function updateCurrentTime() {
+    const now = new Date();
+    const options = {
+        year: 'numeric',
+        month: 'short',
+        day: 'numeric',
+        hour: '2-digit',
+        minute: '2-digit',
+        second: '2-digit',
+        hour12: false
+    };
+    document.getElementById('current-time').textContent = now.toLocaleString('en-US', options);
+}
+
+// Update time every second
+setInterval(updateCurrentTime, 1000);
+updateCurrentTime(); // Initial call
+
+// Set minimum datetime to current time + 1 hour
+document.addEventListener('DOMContentLoaded', function() {
+    const endTimeInput = document.querySelector('input[name="end_time"]');
+    if (endTimeInput) {
+        const now = new Date();
+        now.setHours(now.getHours() + 1); // Add 1 hour minimum
+        const minDateTime = now.toISOString().slice(0, 16); // Format for datetime-local input
+        endTimeInput.min = minDateTime;
+    }
+});
+</script>
 {% endblock %}

@@ -1,0 +1,200 @@
+{% extends 'base.html' %}
+
+{% block title %}Manage Auction - {{ auction.title }}{% endblock %}
+
+{% block content %}
+<div class="container">
+    <div class="row">
+        <div class="col-md-8">
+            <div class="card">
+                <div class="card-header bg-primary text-white">
+                    <h4><i class="fas fa-cog"></i> Auction Settings & Management</h4>
+                    <p class="mb-0">{{ auction.title }}</p>
+                </div>
+                <div class="card-body">
+                    <!-- Auction Info Summary -->
+                    <div class="alert alert-info">
+                        <div class="row">
+                            <div class="col-md-6">
+                                <strong>Status:</strong> 
+                                {% if auction.status == 'active' %}
+                                    <span class="badge bg-success">Active</span>
+                                {% elif auction.status == 'closed' %}
+                                    <span class="badge bg-secondary">Closed</span>
+                                {% elif auction.status == 'extended' %}
+                                    <span class="badge bg-info">Extended</span>
+                                {% endif %}
+                            </div>
+                            <div class="col-md-6">
+                                <strong>Current Bid:</strong> ${{ auction.current_price }}
+                            </div>
+                            <div class="col-md-6">
+                                <strong>Total Bids:</strong> {{ auction.bids.count }}
+                            </div>
+                            <div class="col-md-6">
+                                <strong>Created:</strong> {{ auction.created_at|timesince }} ago
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- Management Options -->
+                    <div class="row">
+                        <!-- Update Description -->
+                        <div class="col-md-12 mb-4">
+                            <div class="card">
+                                <div class="card-header">
+                                    <h6><i class="fas fa-edit"></i> Update Description</h6>
+                                </div>
+                                <div class="card-body">
+                                    <form method="POST">
+                                        {% csrf_token %}
+                                        <input type="hidden" name="action" value="update_description">
+                                        <div class="mb-3">
+                                            <label for="description" class="form-label">Description</label>
+                                            <textarea name="description" id="description" class="form-control" rows="4">{{ auction.description }}</textarea>
+                                        </div>
+                                        <button type="submit" class="btn btn-primary">
+                                            <i class="fas fa-save"></i> Update Description
+                                        </button>
+                                    </form>
+                                </div>
+                            </div>
+                        </div>
+
+                        <!-- Update Image -->
+                        <div class="col-md-12 mb-4">
+                            <div class="card">
+                                <div class="card-header">
+                                    <h6><i class="fas fa-image"></i> Update Image</h6>
+                                </div>
+                                <div class="card-body">
+                                    <!-- Current Image Preview -->
+                                    {% if auction.image %}
+                                    <div class="mb-3">
+                                        <label class="form-label">Current Image:</label><br>
+                                        <img src="{{ auction.image.url }}" alt="{{ auction.title }}" 
+                                             class="img-thumbnail" style="max-width: 200px; max-height: 200px;">
+                                    </div>
+                                    {% endif %}
+                                    
+                                    <form method="POST" enctype="multipart/form-data">
+                                        {% csrf_token %}
+                                        <input type="hidden" name="action" value="update_image">
+                                        <div class="mb-3">
+                                            <label for="image" class="form-label">New Image</label>
+                                            <input type="file" name="image" id="image" class="form-control" accept="image/*">
+                                        </div>
+                                        <button type="submit" class="btn btn-success">
+                                            <i class="fas fa-upload"></i> Update Image
+                                        </button>
+                                    </form>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Action Panel -->
+        <div class="col-md-4">
+            <!-- Quick Actions Card -->
+            <div class="card mb-4">
+                <div class="card-header">
+                    <h6><i class="fas fa-bolt"></i> Quick Actions</h6>
+                </div>
+                <div class="card-body">
+                    <!-- Back to Auction -->
+                    <a href="{% url 'auction_detail' auction.pk %}" class="btn btn-outline-primary w-100 mb-2">
+                        <i class="fas fa-arrow-left"></i> Back to Auction
+                    </a>
+
+                    <!-- End Auction -->
+                    {% if auction.status == 'active' %}
+                    <button type="button" class="btn btn-warning w-100 mb-2" data-bs-toggle="modal" data-bs-target="#endAuctionModal">
+                        <i class="fas fa-stop"></i> End Auction Now
+                    </button>
+                    {% endif %}
+
+                    <!-- Extend Time -->
+                    {% if auction.status == 'active' and auction.can_extend_time %}
+                    <a href="{% url 'extend_auction_time' auction.pk %}" class="btn btn-info w-100 mb-2">
+                        <i class="fas fa-clock"></i> Extend Time
+                    </a>
+                    {% endif %}
+
+                    <!-- Delete Auction -->
+                    {% if auction.can_be_deleted_by_seller %}
+                    <a href="{% url 'delete_auction' auction.pk %}" class="btn btn-danger w-100 mb-2">
+                        <i class="fas fa-trash"></i> Delete Auction
+                    </a>
+                    {% endif %}
+                </div>
+            </div>
+
+            <!-- Auction Statistics -->
+            <div class="card">
+                <div class="card-header">
+                    <h6><i class="fas fa-chart-bar"></i> Auction Statistics</h6>
+                </div>
+                <div class="card-body">
+                    <div class="mb-2">
+                        <strong>Views:</strong> <span class="badge bg-secondary">N/A</span>
+                    </div>
+                    <div class="mb-2">
+                        <strong>Watchers:</strong> <span class="badge bg-secondary">N/A</span>
+                    </div>
+                    <div class="mb-2">
+                        <strong>Bid Increment:</strong> $1.00
+                    </div>
+                    {% if auction.time_remaining %}
+                    <div class="mb-2">
+                        <strong>Time Left:</strong> 
+                        <span class="badge bg-warning">{{ auction.time_remaining.days }}d remaining</span>
+                    </div>
+                    {% endif %}
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- End Auction Confirmation Modal -->
+<div class="modal fade" id="endAuctionModal" tabindex="-1">
+    <div class="modal-dialog">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title">End Auction Confirmation</h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+            </div>
+            <div class="modal-body">
+                <div class="alert alert-warning">
+                    <i class="fas fa-exclamation-triangle"></i>
+                    <strong>Warning!</strong> This action cannot be undone.
+                </div>
+                <p>Are you sure you want to end this auction now?</p>
+                <ul>
+                    <li>The auction will be marked as closed</li>
+                    <li>The highest bidder will be declared the winner</li>
+                    <li>No more bids will be accepted</li>
+                </ul>
+                {% if auction.bids.exists %}
+                <p><strong>Current highest bidder:</strong> {{ auction.bids.first.bidder.username }} with ${{ auction.current_price }}</p>
+                {% else %}
+                <p><strong>Note:</strong> No bids have been placed on this auction.</p>
+                {% endif %}
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancel</button>
+                <form method="POST" style="display: inline;">
+                    {% csrf_token %}
+                    <input type="hidden" name="action" value="end_auction">
+                    <button type="submit" class="btn btn-warning">
+                        <i class="fas fa-stop"></i> End Auction
+                    </button>
+                </form>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}

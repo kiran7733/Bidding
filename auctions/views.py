@@ -5,10 +5,32 @@ from django.utils import timezone
 from django.core.paginator import Paginator
 from django.db.models import Q, Max
 from django.http import JsonResponse
-from .models import AuctionItem, Category, Bid
-from .forms import AuctionItemForm, BidForm
+from datetime import timedelta
+from .models import AuctionItem, Category, Bid, AuctionExtension
+from .forms import AuctionItemForm, BidForm, ExtendTimeForm
+
+
+def auto_close_expired_auctions():
+    """Helper function to auto-close expired auctions"""
+    expired_auctions = AuctionItem.objects.filter(
+        status='active',
+        end_time__lte=timezone.now()
+    )
+    
+    for auction in expired_auctions:
+        auction.status = 'closed'
+        highest_bid = auction.bids.filter(is_deleted=False).order_by('-amount').first()
+        if highest_bid:
+            auction.winner = highest_bid.bidder
+        auction.save()
+    
+    return expired_auctions.count()
+
 
 def home(request):
+    # Auto-close expired auctions first
+    auto_close_expired_auctions()
+    
     # Get active auctions
     active_auctions = AuctionItem.objects.filter(
         status='active',
@@ -19,7 +41,7 @@ def home(request):
     
     # Get some statistics
     total_auctions = AuctionItem.objects.filter(status='active').count()
-    total_bids = Bid.objects.count()
+    total_bids = Bid.objects.filter(is_deleted=False).count()
     
     context = {
         'active_auctions': active_auctions,
@@ -29,7 +51,12 @@ def home(request):
     }
     return render(request, 'auctions/home.html', context)
 
+
 def auction_list(request):
+    # Auto-close expired auctions before displaying
+    auto_close_expired_auctions()
+    
+    # Get active auctions
     auctions = AuctionItem.objects.filter(
         status='active',
         end_time__gt=timezone.now()
@@ -68,21 +95,41 @@ def auction_list(request):
     }
     return render(request, 'auctions/auction_list.html', context)
 
+
 def auction_detail(request, pk):
     auction = get_object_or_404(AuctionItem, pk=pk)
-    bids = auction.bids.all()[:10]  # Latest 10 bids
+    
+    # Auto-close expired auctions
+    auto_close_expired_auctions()
+    
+    # Refresh auction object in case it was updated
+    auction.refresh_from_db()
+    
+    # Get valid bids only
+    bids = auction.bids.filter(is_deleted=False).order_by('-timestamp')[:10]
+    user_bids = None
     user_highest_bid = None
+    current_highest_bid = None
+    
+    # Get the current highest bid
+    current_highest_bid = auction.bids.filter(is_deleted=False).order_by('-amount').first()
     
     if request.user.is_authenticated:
-        user_highest_bid = auction.bids.filter(bidder=request.user).order_by('-amount').first()
+        # Get ALL user's bids for this auction (not deleted)
+        user_bids = auction.bids.filter(bidder=request.user, is_deleted=False).order_by('-timestamp')
+        user_highest_bid = user_bids.first()
     
     context = {
         'auction': auction,
         'bids': bids,
-        'bid_form': BidForm() if request.user.is_authenticated else None,
+        'user_bids': user_bids,
         'user_highest_bid': user_highest_bid,
+        'current_highest_bid': current_highest_bid,
+        'bid_form': BidForm() if request.user.is_authenticated else None,
+        'extend_form': ExtendTimeForm() if request.user.is_authenticated else None,
     }
     return render(request, 'auctions/auction_detail.html', context)
+
 
 @login_required
 def place_bid(request, pk):
@@ -102,7 +149,10 @@ def place_bid(request, pk):
             bid_amount = form.cleaned_data['amount']
             
             # Check if bid is higher than current price
-            if bid_amount > auction.current_price:
+            current_highest = auction.bids.filter(is_deleted=False).order_by('-amount').first()
+            min_bid = current_highest.amount + 1 if current_highest else auction.starting_price
+            
+            if bid_amount >= min_bid:
                 # Create new bid
                 Bid.objects.create(
                     item=auction,
@@ -116,11 +166,109 @@ def place_bid(request, pk):
                 
                 messages.success(request, f'Your bid of ${bid_amount} has been placed successfully!')
             else:
-                messages.error(request, f'Your bid must be higher than the current price of ${auction.current_price}.')
+                messages.error(request, f'Your bid must be at least ${min_bid}.')
         else:
             messages.error(request, 'Please enter a valid bid amount.')
     
     return redirect('auction_detail', pk=pk)
+
+
+@login_required
+def delete_bid(request, bid_id):
+    bid = get_object_or_404(Bid, id=bid_id, bidder=request.user, is_deleted=False)
+    
+    # Check if auction is still active
+    if not bid.item.is_active():
+        messages.error(request, 'Cannot delete bids on inactive auctions.')
+        return redirect('auction_detail', pk=bid.item.pk)
+    
+    if request.method == 'POST':
+        # Check if bid can be deleted at the time of deletion
+        if not bid.can_be_deleted():
+            messages.error(request, 'This bid cannot be deleted. Either the time limit has exceeded or it\'s currently the highest bid.')
+            return redirect('auction_detail', pk=bid.item.pk)
+        
+        # Perform soft delete
+        bid.soft_delete()
+        messages.success(request, f'Your bid of ${bid.amount} has been successfully deleted.')
+        return redirect('auction_detail', pk=bid.item.pk)
+    
+    # Show confirmation page
+    context = {
+        'bid': bid,
+        'can_delete': bid.can_be_deleted(),
+        'is_highest': bid == bid.item.bids.filter(is_deleted=False).order_by('-amount').first()
+    }
+    return render(request, 'auctions/delete_bid.html', context)
+
+
+@login_required
+def extend_auction_time(request, pk):
+    auction = get_object_or_404(AuctionItem, pk=pk)
+    
+    # Only allow the auction seller/owner to extend time
+    if request.user != auction.seller:
+        messages.error(request, 'Only the auction owner can extend auction time.')
+        return redirect('auction_detail', pk=pk)
+    
+    if not auction.can_extend_time():
+        messages.error(request, 'This auction cannot be extended further.')
+        return redirect('auction_detail', pk=pk)
+    
+    if request.method == 'POST':
+        form = ExtendTimeForm(request.POST)
+        if form.is_valid():
+            extension_hours = form.cleaned_data['extension_hours']
+            reason = form.cleaned_data['reason']
+            
+            old_end_time = auction.end_time
+            new_end_time = auction.end_time + timedelta(hours=extension_hours)
+            
+            # Create extension record
+            AuctionExtension.objects.create(
+                auction=auction,
+                extended_by=request.user,
+                old_end_time=old_end_time,
+                new_end_time=new_end_time,
+                extension_reason=reason
+            )
+            
+            # Update auction
+            auction.end_time = new_end_time
+            auction.time_extensions += 1
+            if auction.time_extensions > 0:
+                auction.status = 'extended'
+            auction.save()
+            
+            messages.success(request, f'Auction extended by {extension_hours} hours successfully!')
+            return redirect('auction_detail', pk=pk)
+    else:
+        form = ExtendTimeForm()
+    
+    return render(request, 'auctions/extend_auction.html', {'form': form, 'auction': auction})
+
+
+@login_required
+def delete_auction(request, pk):
+    auction = get_object_or_404(AuctionItem, pk=pk, seller=request.user)
+    
+    if not auction.can_be_deleted_by_seller():
+        messages.error(request, 'This auction cannot be deleted. Either the time limit has passed (10 minutes) or there are existing bids.')
+        return redirect('auction_detail', pk=pk)
+    
+    if request.method == 'POST':
+        auction_title = auction.title
+        auction.delete()
+        messages.success(request, f'Auction "{auction_title}" has been deleted successfully.')
+        return redirect('my_auctions')
+    
+    context = {
+        'auction': auction,
+        'can_delete': auction.can_be_deleted_by_seller(),
+        'time_left_to_delete': max(0, (auction.created_at + timedelta(minutes=10) - timezone.now()).total_seconds())
+    }
+    return render(request, 'auctions/delete_auction.html', context)
+
 
 @login_required
 def create_auction(request):
@@ -130,6 +278,7 @@ def create_auction(request):
             auction = form.save(commit=False)
             auction.seller = request.user
             auction.current_price = auction.starting_price
+            auction.original_end_time = auction.end_time  # Store original end time
             auction.save()
             messages.success(request, 'Your auction has been created successfully!')
             return redirect('auction_detail', pk=auction.pk)
@@ -138,10 +287,17 @@ def create_auction(request):
     
     return render(request, 'auctions/create_auction.html', {'form': form})
 
+
 @login_required
 def my_auctions(request):
+    # Auto-close expired auctions first
+    auto_close_expired_auctions()
+    
     selling = AuctionItem.objects.filter(seller=request.user).order_by('-created_at')
-    bidding = AuctionItem.objects.filter(bids__bidder=request.user).distinct().order_by('-created_at')
+    bidding = AuctionItem.objects.filter(
+        bids__bidder=request.user, 
+        bids__is_deleted=False
+    ).distinct().order_by('-created_at')
     won_auctions = AuctionItem.objects.filter(winner=request.user).order_by('-end_time')
     
     context = {
@@ -151,18 +307,83 @@ def my_auctions(request):
     }
     return render(request, 'auctions/my_auctions.html', context)
 
+
+# Additional utility views for AJAX functionality (optional)
 @login_required
-def delete_auction(request, pk):
+def get_auction_status(request, pk):
+    """AJAX endpoint to get real-time auction status"""
+    auction = get_object_or_404(AuctionItem, pk=pk)
+    
+    # Auto-close if expired
+    if auction.status == 'active' and timezone.now() >= auction.end_time:
+        auction.status = 'closed'
+        highest_bid = auction.bids.filter(is_deleted=False).order_by('-amount').first()
+        if highest_bid:
+            auction.winner = highest_bid.bidder
+        auction.save()
+    
+    data = {
+        'status': auction.status,
+        'current_price': float(auction.current_price),
+        'time_remaining': auction.time_remaining().total_seconds() if auction.time_remaining() else 0,
+        'bid_count': auction.bids.filter(is_deleted=False).count(),
+        'is_active': auction.is_active(),
+    }
+    
+    return JsonResponse(data)
+
+
+@login_required
+def get_recent_bids(request, pk):
+    """AJAX endpoint to get recent bids for live updates"""
+    auction = get_object_or_404(AuctionItem, pk=pk)
+    recent_bids = auction.bids.filter(is_deleted=False).order_by('-timestamp')[:5]
+    
+    bids_data = []
+    for bid in recent_bids:
+        bids_data.append({
+            'bidder': bid.bidder.username,
+            'amount': float(bid.amount),
+            'timestamp': bid.timestamp.isoformat(),
+            'is_current_user': bid.bidder == request.user,
+        })
+
+    return JsonResponse({'bids': bids_data})
+@login_required
+def manage_auction(request, pk):
     auction = get_object_or_404(AuctionItem, pk=pk, seller=request.user)
     
-    # Only allow deletion if no bids have been placed
-    if auction.bids.exists():
-        messages.error(request, 'Cannot delete auction with existing bids.')
+    if request.method == 'POST':
+        action = request.POST.get('action')
+        
+        if action == 'update_description':
+            new_description = request.POST.get('description')
+            if new_description:
+                auction.description = new_description
+                auction.save()
+                messages.success(request, 'Description updated successfully!')
+        
+        elif action == 'update_image':
+            if 'image' in request.FILES:
+                auction.image = request.FILES['image']
+                auction.save()
+                messages.success(request, 'Image updated successfully!')
+        
+        elif action == 'end_auction':
+            if auction.status == 'active':
+                auction.status = 'closed'
+                highest_bid = auction.bids.filter(is_deleted=False).order_by('-amount').first()
+                if highest_bid:
+                    auction.winner = highest_bid.bidder
+                auction.save()
+                messages.success(request, 'Auction ended successfully!')
+            else:
+                messages.error(request, 'Can only end active auctions.')
+        
         return redirect('auction_detail', pk=pk)
     
-    if request.method == 'POST':
-        auction.delete()
-        messages.success(request, 'Auction deleted successfully.')
-        return redirect('my_auctions')
-    
-    return render(request, 'auctions/delete_auction.html', {'auction': auction})
+    context = {
+        'auction': auction,
+    }
+    return render(request, 'auctions/manage_auction.html', context)
+

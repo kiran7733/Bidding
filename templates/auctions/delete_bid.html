@@ -1,0 +1,73 @@
+{% extends 'base.html' %}
+
+{% block title %}Delete Bid - Online Auction{% endblock %}
+
+{% block content %}
+<div class="row justify-content-center">
+    <div class="col-md-6">
+        <div class="card">
+            <div class="card-header bg-warning text-dark">
+                <h4><i class="fas fa-exclamation-triangle"></i> Delete Your Bid</h4>
+            </div>
+            <div class="card-body">
+                {% if can_delete %}
+                <div class="alert alert-warning">
+                    <i class="fas fa-exclamation-triangle"></i>
+                    <strong>Warning!</strong> This action cannot be undone.
+                </div>
+                {% else %}
+                <div class="alert alert-danger">
+                    <i class="fas fa-times-circle"></i>
+                    <strong>Cannot Delete!</strong> 
+                    {% if is_highest %}
+                        This is currently the highest bid and cannot be deleted.
+                    {% else %}
+                        The time limit for deleting this bid has expired (30 minutes).
+                    {% endif %}
+                </div>
+                {% endif %}
+                
+                <p>{% if can_delete %}Are you sure you want to delete your bid?{% else %}Bid deletion is not allowed.{% endif %}</p>
+                
+                <div class="card mb-3">
+                    <div class="card-body">
+                        <h6><i class="fas fa-info-circle"></i> Bid Details:</h6>
+                        <div class="row">
+                            <div class="col-sm-4"><strong>Amount:</strong></div>
+                            <div class="col-sm-8">${{ bid.amount }}</div>
+                        </div>
+                        <div class="row">
+                            <div class="col-sm-4"><strong>Placed:</strong></div>
+                            <div class="col-sm-8">{{ bid.timestamp|timesince }} ago</div>
+                        </div>
+                        <div class="row">
+                            <div class="col-sm-4"><strong>Auction:</strong></div>
+                            <div class="col-sm-8">{{ bid.item.title }}</div>
+                        </div>
+                        {% if is_highest %}
+                        <div class="row">
+                            <div class="col-sm-4"><strong>Status:</strong></div>
+                            <div class="col-sm-8"><span class="badge bg-success">Current Highest Bid</span></div>
+                        </div>
+                        {% endif %}
+                    </div>
+                </div>
+                
+                <div class="d-flex justify-content-between">
+                    <a href="{% url 'auction_detail' bid.item.pk %}" class="btn btn-secondary">
+                        <i class="fas fa-arrow-left"></i> Back to Auction
+                    </a>
+                    {% if can_delete %}
+                    <form method="POST" style="display: inline;">
+                        {% csrf_token %}
+                        <button type="submit" class="btn btn-danger">
+                            <i class="fas fa-trash"></i> Delete My Bid
+                        </button>
+                    </form>
+                    {% endif %}
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}

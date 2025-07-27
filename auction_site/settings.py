@@ -82,17 +82,17 @@ AUTH_PASSWORD_VALIDATORS = [
 
 # Internationalization
 LANGUAGE_CODE = 'en-us'
-TIME_ZONE = 'UTC'
+
+# Fix timezone issues - Set to your local timezone
+TIME_ZONE = 'Asia/Kolkata'  # Change this to your timezone
 USE_I18N = True
-USE_TZ = True
+USE_TZ = True  # Keep this True for timezone-aware datetimes
 
 # Static files (CSS, JavaScript, Images)
 STATIC_URL = '/static/'
 STATICFILES_DIRS = [
     BASE_DIR / 'static',
 ]
-
-# ADD THIS LINE - This is what was missing!
 STATIC_ROOT = BASE_DIR / 'staticfiles'
 
 # Media files
@@ -109,3 +109,8 @@ CRISPY_TEMPLATE_PACK = 'bootstrap4'
 LOGIN_URL = '/accounts/login/'
 LOGIN_REDIRECT_URL = '/'
 LOGOUT_REDIRECT_URL = '/'
+
+# Date and time format settings
+DATETIME_FORMAT = 'M d, Y H:i'
+DATE_FORMAT = 'M d, Y'
+TIME_FORMAT = 'H:i'

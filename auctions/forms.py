@@ -48,3 +48,28 @@ class BidForm(forms.ModelForm):
         if amount <= 0:
             raise forms.ValidationError("Bid amount must be greater than 0.")
         return amount
+
+class ExtendTimeForm(forms.Form):
+    EXTENSION_CHOICES = [
+        (1, '1 Hour'),
+        (2, '2 Hours'),
+        (6, '6 Hours'),
+        (12, '12 Hours'),
+        (24, '24 Hours'),
+    ]
+    
+    extension_hours = forms.ChoiceField(
+        choices=EXTENSION_CHOICES,
+        widget=forms.Select(attrs={'class': 'form-select'}),
+        label='Extension Duration'
+    )
+    
+    reason = forms.CharField(
+        max_length=200,
+        required=False,
+        widget=forms.TextInput(attrs={
+            'class': 'form-control',
+            'placeholder': 'Reason for extension (optional)'
+        }),
+        label='Reason'
+    )
