@@ -114,3 +114,8 @@ LOGOUT_REDIRECT_URL = '/'
 DATETIME_FORMAT = 'M d, Y H:i'
 DATE_FORMAT = 'M d, Y'
 TIME_FORMAT = 'H:i'
+
+# Razorpay credentials (TEST KEYS)
+# For production, move these to environment variables
+RAZORPAY_KEY_ID = 'rzp_test_ROBzPCRj4IeRS7'
+RAZORPAY_KEY_SECRET = 'eTphv1F6IvcHxIN02RkjLgwn'

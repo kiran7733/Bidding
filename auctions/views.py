@@ -24,6 +24,23 @@ def auto_close_expired_auctions():
         highest_bid = auction.bids.filter(is_deleted=False).order_by('-amount').first()
         if highest_bid:
             auction.winner = highest_bid.bidder
+            # Credit seller wallet with winning amount
+            try:
+                from accounts.models import Wallet, WalletTransaction
+                from django.db import transaction as dbtx
+                with dbtx.atomic():
+                    seller_wallet, _ = Wallet.objects.get_or_create(user=auction.seller)
+                    new_balance = seller_wallet.add_funds(highest_bid.amount)
+                    WalletTransaction.objects.create(
+                        wallet=seller_wallet,
+                        transaction_type='auction_sold',
+                        amount=highest_bid.amount,
+                        balance_after=new_balance,
+                        description=f'Auction sold: {auction.title}'
+                    )
+            except Exception:
+                # Avoid breaking auto-close if wallet credit fails; could log this
+                pass
         auction.save()
     
     return expired_auctions.count()
