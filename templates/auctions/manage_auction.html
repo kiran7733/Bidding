@@ -26,7 +26,7 @@
                                 {% endif %}
                             </div>
                             <div class="col-md-6">
-                                <strong>Current Bid:</strong> ${{ auction.current_price }}
+                                <strong>Current Bid:</strong> ₹{{ auction.current_price }}
                             </div>
                             <div class="col-md-6">
                                 <strong>Total Bids:</strong> {{ auction.bids.count }}
@@ -145,7 +145,7 @@
                         <strong>Watchers:</strong> <span class="badge bg-secondary">N/A</span>
                     </div>
                     <div class="mb-2">
-                        <strong>Bid Increment:</strong> $1.00
+                        <strong>Bid Increment:</strong> ₹1.00
                     </div>
                     {% if auction.time_remaining %}
                     <div class="mb-2">
@@ -179,7 +179,7 @@
                     <li>No more bids will be accepted</li>
                 </ul>
                 {% if auction.bids.exists %}
-                <p><strong>Current highest bidder:</strong> {{ auction.bids.first.bidder.username }} with ${{ auction.current_price }}</p>
+                <p><strong>Current highest bidder:</strong> {{ auction.bids.first.bidder.username }} with ₹{{ auction.current_price }}</p>
                 {% else %}
                 <p><strong>Note:</strong> No bids have been placed on this auction.</p>
                 {% endif %}

@@ -34,7 +34,7 @@
                 {% for bid in user_bids %}
                 <div class="d-flex justify-content-between align-items-center mb-3 p-3 {% if forloop.first %}bg-light border{% endif %} rounded">
                     <div>
-                        <strong class="text-success">${{ bid.amount }}</strong>
+                        <strong class="text-success">₹{{ bid.amount }}</strong>
                         <br>
                         <small class="text-muted">
                             <i class="fas fa-clock"></i> {{ bid.timestamp|timesince }} ago
@@ -51,7 +51,7 @@
                             <i class="fas fa-trash"></i> Delete
                         </a>
                         <br>
-                        {% if bid.can_be_deleted %}
+                        {% if bid.can_be_deleted_property %}
                             <small class="text-success">✓ Can be deleted</small>
                         {% else %}
                             <small class="text-muted">
@@ -79,8 +79,8 @@
             <div class="card-body">
                 <p><strong>Category:</strong> {{ auction.category.name }}</p>
                 <p><strong>Seller:</strong> {{ auction.seller.username }}</p>
-                <p><strong>Starting Price:</strong> ${{ auction.starting_price }}</p>
-                <h5 class="text-success">Current Bid: ${{ auction.current_price }}</h5>
+                <p><strong>Starting Price:</strong> ₹{{ auction.starting_price }}</p>
+                <h5 class="text-success">Current Bid: ₹{{ auction.current_price }}</h5>
                 
                 {% if current_highest_bid %}
                 <p class="text-muted">
@@ -95,7 +95,7 @@
                 {% endif %}
                 
                 <!-- Live Countdown Timer -->
-                {% if auction.status == 'active' %}
+                {% if auction.status == 'active' or auction.status == 'extended' %}
                 <div class="alert alert-warning">
                     <i class="fas fa-clock"></i> 
                     <strong>Time Remaining:</strong><br>
@@ -125,7 +125,7 @@
             </div>
             <div class="card-body">
                 <!-- Delete Auction Button -->
-                {% if auction.can_be_deleted_by_seller %}
+                {% if auction.can_be_deleted_by_seller_property %}
                 <a href="{% url 'delete_auction' auction.pk %}" class="btn btn-danger btn-sm mb-2 w-100">
                     <i class="fas fa-trash"></i> Delete Auction
                 </a>
@@ -135,7 +135,7 @@
                 {% endif %}
                 
                 <!-- Extend Time Button -->
-                {% if auction.status == 'active' and auction.can_extend_time %}
+                {% if auction.status == 'active' and auction.can_extend_time_property %}
                 <a href="{% url 'extend_auction_time' auction.pk %}" class="btn btn-warning btn-sm w-100">
                     <i class="fas fa-clock"></i> Extend Time
                 </a>
@@ -145,25 +145,48 @@
         {% endif %}
         
         <!-- Bidding Section -->
-        {% if user.is_authenticated and auction.status == 'active' and user != auction.seller %}
+        {% if user.is_authenticated and auction.is_active and user != auction.seller %}
         <div class="card mb-4">
             <div class="card-header">
                 <h5><i class="fas fa-gavel"></i> Place Your Bid</h5>
             </div>
             <div class="card-body">
+                <!-- Wallet Balance Display -->
+                <div class="alert alert-info mb-3">
+                    <i class="fas fa-wallet"></i>
+                    <strong>Your Wallet Balance:</strong> 
+                    {% if user.wallet %}
+                        {{ user.wallet.get_balance_display }}
+                    {% else %}
+                        ₹0.00
+                    {% endif %}
+                    <a href="{% url 'wallet' %}" class="btn btn-sm btn-outline-primary ms-2">
+                        <i class="fas fa-wallet"></i> Manage Wallet
+                    </a>
+                </div>
+                
                 <form method="POST" action="{% url 'place_bid' auction.pk %}">
                     {% csrf_token %}
                     <div class="mb-3">
-                        <label for="id_amount" class="form-label">Bid Amount ($)</label>
+                        <label for="id_amount" class="form-label">Bid Amount (₹)</label>
                         {{ bid_form.amount }}
                         <div class="form-text">
-                            Minimum bid: ${{ auction.current_price|add:1 }}
+                            Minimum bid: ₹{{ min_bid_amount }}
                         </div>
                     </div>
                     <button type="submit" class="btn btn-success w-100">
                         <i class="fas fa-gavel"></i> Place Bid
                     </button>
                 </form>
+                
+                <!-- Insufficient Balance Warning -->
+                <div class="alert alert-warning mt-3" style="display: none;" id="insufficient-balance-warning">
+                    <i class="fas fa-exclamation-triangle"></i>
+                    <strong>Insufficient Balance!</strong> You need to add funds to your wallet to place this bid.
+                    <a href="{% url 'add_funds' %}" class="btn btn-sm btn-warning ms-2">
+                        <i class="fas fa-plus"></i> Add Funds
+                    </a>
+                </div>
             </div>
         </div>
         {% elif not user.is_authenticated %}
@@ -196,7 +219,7 @@
                             <span class="badge bg-success ms-1">Highest</span>
                         {% endif %}
                     </div>
-                    <span class="fw-bold text-success">${{ bid.amount }}</span>
+                    <span class="fw-bold text-success">₹{{ bid.amount }}</span>
                 </div>
                 <small class="text-muted">{{ bid.timestamp|timesince }} ago</small>
                 {% if not forloop.last %}<hr>{% endif %}
@@ -251,5 +274,42 @@ function updateCountdown() {
 // Update countdown every second
 setInterval(updateCountdown, 1000);
 updateCountdown(); // Initial call
+
+// Wallet balance validation
+document.addEventListener('DOMContentLoaded', function() {
+    const bidForm = document.querySelector('form[action*="place_bid"]');
+    if (bidForm) {
+        const amountInput = bidForm.querySelector('input[name="amount"]');
+        const submitButton = bidForm.querySelector('button[type="submit"]');
+        const warningDiv = document.getElementById('insufficient-balance-warning');
+        
+        // Get wallet balance from the page (you might need to pass this from the view)
+        const walletBalance = parseFloat('{% if user.wallet %}{{ user.wallet.balance }}{% else %}0{% endif %}');
+        
+        function checkBalance() {
+            const bidAmount = parseFloat(amountInput.value);
+            const minBid = parseFloat('{{ min_bid_amount }}');
+            
+            if (bidAmount > walletBalance) {
+                warningDiv.style.display = 'block';
+                warningDiv.innerHTML = '<i class="fas fa-exclamation-triangle"></i><strong>Insufficient Balance!</strong> You need to add funds to your wallet to place this bid.<a href="{% url "add_funds" %}" class="btn btn-sm btn-warning ms-2"><i class="fas fa-plus"></i> Add Funds</a>';
+                submitButton.disabled = true;
+                submitButton.innerHTML = '<i class="fas fa-exclamation-triangle"></i> Insufficient Balance';
+            } else if (bidAmount < minBid) {
+                warningDiv.style.display = 'block';
+                warningDiv.innerHTML = `<i class="fas fa-exclamation-triangle"></i><strong>Bid Too Low!</strong> Minimum bid is ₹${minBid}.`;
+                submitButton.disabled = true;
+                submitButton.innerHTML = '<i class="fas fa-exclamation-triangle"></i> Bid Too Low';
+            } else {
+                warningDiv.style.display = 'none';
+                submitButton.disabled = false;
+                submitButton.innerHTML = '<i class="fas fa-gavel"></i> Place Bid';
+            }
+        }
+        
+        amountInput.addEventListener('input', checkBalance);
+        checkBalance(); // Initial check
+    }
+});
 </script>
 {% endblock %}

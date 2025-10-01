@@ -5,15 +5,17 @@ from django.utils import timezone
 from django.core.paginator import Paginator
 from django.db.models import Q, Max
 from django.http import JsonResponse
+from django.db import transaction
 from datetime import timedelta
 from .models import AuctionItem, Category, Bid, AuctionExtension
 from .forms import AuctionItemForm, BidForm, ExtendTimeForm
+from accounts.models import Wallet, WalletTransaction
 
 
 def auto_close_expired_auctions():
     """Helper function to auto-close expired auctions"""
     expired_auctions = AuctionItem.objects.filter(
-        status='active',
+        status__in=['active', 'extended'],  # Include both active and extended auctions
         end_time__lte=timezone.now()
     )
     
@@ -33,14 +35,14 @@ def home(request):
     
     # Get active auctions
     active_auctions = AuctionItem.objects.filter(
-        status='active',
+        status__in=['active', 'extended'],
         end_time__gt=timezone.now()
     ).order_by('-created_at')[:6]
     
     categories = Category.objects.all()
     
     # Get some statistics
-    total_auctions = AuctionItem.objects.filter(status='active').count()
+    total_auctions = AuctionItem.objects.filter(status__in=['active', 'extended']).count()
     total_bids = Bid.objects.filter(is_deleted=False).count()
     
     context = {
@@ -58,7 +60,7 @@ def auction_list(request):
     
     # Get active auctions
     auctions = AuctionItem.objects.filter(
-        status='active',
+        status__in=['active', 'extended'],
         end_time__gt=timezone.now()
     ).order_by('-created_at')
     
@@ -114,6 +116,12 @@ def auction_detail(request, pk):
     # Get the current highest bid
     current_highest_bid = auction.bids.filter(is_deleted=False).order_by('-amount').first()
     
+    # Calculate minimum bid for display
+    if current_highest_bid:
+        min_bid_amount = current_highest_bid.amount + 1
+    else:
+        min_bid_amount = auction.starting_price
+    
     if request.user.is_authenticated:
         # Get ALL user's bids for this auction (not deleted)
         user_bids = auction.bids.filter(bidder=request.user, is_deleted=False).order_by('-timestamp')
@@ -125,7 +133,8 @@ def auction_detail(request, pk):
         'user_bids': user_bids,
         'user_highest_bid': user_highest_bid,
         'current_highest_bid': current_highest_bid,
-        'bid_form': BidForm() if request.user.is_authenticated else None,
+        'min_bid_amount': min_bid_amount,
+        'bid_form': BidForm(auction=auction) if request.user.is_authenticated else None,
         'extend_form': ExtendTimeForm() if request.user.is_authenticated else None,
     }
     return render(request, 'auctions/auction_detail.html', context)
@@ -144,31 +153,51 @@ def place_bid(request, pk):
         return redirect('auction_detail', pk=pk)
     
     if request.method == 'POST':
-        form = BidForm(request.POST)
+        form = BidForm(request.POST, auction=auction)
         if form.is_valid():
             bid_amount = form.cleaned_data['amount']
             
-            # Check if bid is higher than current price
-            current_highest = auction.bids.filter(is_deleted=False).order_by('-amount').first()
-            min_bid = current_highest.amount + 1 if current_highest else auction.starting_price
+            # Form validation already checks minimum bid, so we can proceed
+            # Get user's wallet (create if doesn't exist)
+            wallet, created = Wallet.objects.get_or_create(user=request.user)
             
-            if bid_amount >= min_bid:
-                # Create new bid
-                Bid.objects.create(
-                    item=auction,
-                    bidder=request.user,
-                    amount=bid_amount
-                )
-                
-                # Update auction current price
-                auction.current_price = bid_amount
-                auction.save()
-                
-                messages.success(request, f'Your bid of ${bid_amount} has been placed successfully!')
-            else:
-                messages.error(request, f'Your bid must be at least ${min_bid}.')
+            # Check if user has sufficient balance
+            if not wallet.has_sufficient_balance(bid_amount):
+                messages.error(request, f'Insufficient wallet balance. You need ₹{bid_amount} but have ₹{wallet.balance}. Please add funds to your wallet.')
+                return redirect('auction_detail', pk=pk)
+            
+            try:
+                with transaction.atomic():
+                    # Deduct funds from wallet
+                    new_balance = wallet.deduct_funds(bid_amount)
+                    
+                    # Create transaction record
+                    WalletTransaction.objects.create(
+                        wallet=wallet,
+                        transaction_type='bid_placed',
+                        amount=bid_amount,
+                        balance_after=new_balance,
+                        description=f'Bid placed on {auction.title}'
+                    )
+                    
+                    # Create new bid
+                    Bid.objects.create(
+                        item=auction,
+                        bidder=request.user,
+                        amount=bid_amount
+                    )
+                    
+                    # Update auction current price
+                    auction.current_price = bid_amount
+                    auction.save()
+                    
+                    messages.success(request, f'Your bid of ₹{bid_amount} has been placed successfully! Funds deducted from your wallet.')
+                    
+            except ValueError as e:
+                messages.error(request, f'Error processing bid: {str(e)}')
         else:
-            messages.error(request, 'Please enter a valid bid amount.')
+            # Form validation errors will be displayed
+            pass
     
     return redirect('auction_detail', pk=pk)
 
@@ -188,9 +217,31 @@ def delete_bid(request, bid_id):
             messages.error(request, 'This bid cannot be deleted. Either the time limit has exceeded or it\'s currently the highest bid.')
             return redirect('auction_detail', pk=bid.item.pk)
         
-        # Perform soft delete
-        bid.soft_delete()
-        messages.success(request, f'Your bid of ${bid.amount} has been successfully deleted.')
+        try:
+            with transaction.atomic():
+                # Get user's wallet (create if doesn't exist)
+                wallet, created = Wallet.objects.get_or_create(user=request.user)
+                
+                # Refund the bid amount
+                new_balance = wallet.add_funds(bid.amount)
+                
+                # Create transaction record for refund
+                WalletTransaction.objects.create(
+                    wallet=wallet,
+                    transaction_type='bid_refund',
+                    amount=bid.amount,
+                    balance_after=new_balance,
+                    description=f'Bid refund for {bid.item.title}'
+                )
+                
+                # Perform soft delete
+                bid.soft_delete()
+                messages.success(request, f'Your bid of ₹{bid.amount} has been successfully deleted and refunded to your wallet.')
+                
+        except ValueError as e:
+            messages.error(request, f'Error processing refund: {str(e)}')
+            return redirect('auction_detail', pk=bid.item.pk)
+        
         return redirect('auction_detail', pk=bid.item.pk)
     
     # Show confirmation page
@@ -218,7 +269,7 @@ def extend_auction_time(request, pk):
     if request.method == 'POST':
         form = ExtendTimeForm(request.POST)
         if form.is_valid():
-            extension_hours = form.cleaned_data['extension_hours']
+            extension_hours = int(form.cleaned_data['extension_hours'])
             reason = form.cleaned_data['reason']
             
             old_end_time = auction.end_time

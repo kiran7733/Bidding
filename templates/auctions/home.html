@@ -30,7 +30,7 @@
                         <h5 class="card-title">{{ auction.title }}</h5>
                         <p class="card-text">{{ auction.description|truncatewords:15 }}</p>
                         <p class="card-text">
-                            <strong>Current Bid: ${{ auction.current_price }}</strong>
+                            <strong>Current Bid: ₹{{ auction.current_price }}</strong>
                         </p>
                         <a href="{% url 'auction_detail' auction.pk %}" class="btn btn-primary">View Details</a>
                     </div>

@@ -38,18 +38,31 @@
                 
                 <ul class="navbar-nav">
                     {% if user.is_authenticated %}
+                    <li class="nav-item">
+                        <a class="nav-link" href="{% url 'wallet' %}">
+                            <i class="fas fa-wallet"></i> 
+                            <span class="badge bg-success">
+                                {% if user.wallet %}
+                                    {{ user.wallet.get_balance_display }}
+                                {% else %}
+                                    ₹0.00
+                                {% endif %}
+                            </span>
+                        </a>
+                    </li>
                     <li class="nav-item dropdown">
                         <a class="nav-link dropdown-toggle" href="#" role="button" data-bs-toggle="dropdown">
                             <i class="fas fa-user"></i> {{ user.username }}
                         </a>
                         <ul class="dropdown-menu">
-                            <li><a class="dropdown-item" href="{% url 'profile' %}">Profile</a></li>
+                            <li><a class="dropdown-item" href="{% url 'profile' %}"><i class="fas fa-user"></i> Profile</a></li>
+                            <li><a class="dropdown-item" href="{% url 'wallet' %}"><i class="fas fa-wallet"></i> Wallet</a></li>
                             <li><hr class="dropdown-divider"></li>
                             <li>
     <form method="post" action="{% url 'logout' %}" style="display: inline;">
         {% csrf_token %}
         <button type="submit" class="dropdown-item" style="border: none; background: none; width: 100%; text-align: left;">
-            Logout
+            <i class="fas fa-sign-out-alt"></i> Logout
         </button>
     </form>
 </li>

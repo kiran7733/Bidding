@@ -1,0 +1,129 @@
+{% extends 'base.html' %}
+{% load crispy_forms_tags %}
+
+{% block title %}My Wallet{% endblock %}
+
+{% block content %}
+<div class="row">
+    <div class="col-md-8">
+        <div class="card">
+            <div class="card-header">
+                <h3><i class="fas fa-wallet"></i> My Wallet</h3>
+            </div>
+            <div class="card-body">
+                <div class="row">
+                    <div class="col-md-6">
+                        <div class="card bg-primary text-white">
+                            <div class="card-body text-center">
+                                <h4>Current Balance</h4>
+                                <h2 class="mb-0">{{ wallet.get_balance_display }}</h2>
+                            </div>
+                        </div>
+                    </div>
+                    <div class="col-md-6">
+                        <div class="card bg-success text-white">
+                            <div class="card-body text-center">
+                                <h4>Wallet Actions</h4>
+                                <div class="d-grid gap-2">
+                                    <a href="{% url 'add_funds' %}" class="btn btn-light">
+                                        <i class="fas fa-plus"></i> Add Funds
+                                    </a>
+                                    <a href="{% url 'withdraw_funds' %}" class="btn btn-light">
+                                        <i class="fas fa-minus"></i> Withdraw
+                                    </a>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+                
+                <hr>
+                
+                <div class="row">
+                    <div class="col-12">
+                        <h5>Recent Transactions</h5>
+                        {% if transactions %}
+                            <div class="table-responsive">
+                                <table class="table table-striped">
+                                    <thead>
+                                        <tr>
+                                            <th>Type</th>
+                                            <th>Amount</th>
+                                            <th>Balance After</th>
+                                            <th>Date</th>
+                                        </tr>
+                                    </thead>
+                                    <tbody>
+                                        {% for transaction in transactions %}
+                                        <tr>
+                                            <td>
+                                                <span class="badge 
+                                                    {% if transaction.transaction_type == 'deposit' %}bg-success
+                                                    {% elif transaction.transaction_type == 'withdrawal' %}bg-danger
+                                                    {% elif transaction.transaction_type == 'bid_placed' %}bg-warning
+                                                    {% elif transaction.transaction_type == 'bid_refund' %}bg-info
+                                                    {% else %}bg-secondary{% endif %}">
+                                                    {{ transaction.get_transaction_type_display }}
+                                                </span>
+                                            </td>
+                                            <td>
+                                                {% if transaction.transaction_type == 'deposit' or transaction.transaction_type == 'bid_refund' %}
+                                                    +₹{{ transaction.amount }}
+                                                {% else %}
+                                                    -₹{{ transaction.amount }}
+                                                {% endif %}
+                                            </td>
+                                            <td>₹{{ transaction.balance_after }}</td>
+                                            <td>{{ transaction.created_at|date:"M d, Y H:i" }}</td>
+                                        </tr>
+                                        {% endfor %}
+                                    </tbody>
+                                </table>
+                            </div>
+                            <div class="text-center">
+                                <a href="{% url 'transaction_history' %}" class="btn btn-outline-primary">
+                                    View All Transactions
+                                </a>
+                            </div>
+                        {% else %}
+                            <div class="alert alert-info">
+                                <i class="fas fa-info-circle"></i> No transactions yet. 
+                                <a href="{% url 'add_funds' %}">Add some funds</a> to get started!
+                            </div>
+                        {% endif %}
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+    
+    <div class="col-md-4">
+        <div class="card">
+            <div class="card-header">
+                <h5><i class="fas fa-info-circle"></i> Wallet Information</h5>
+            </div>
+            <div class="card-body">
+                <p><strong>Created:</strong> {{ wallet.created_at|date:"M d, Y" }}</p>
+                <p><strong>Last Updated:</strong> {{ wallet.updated_at|date:"M d, Y H:i" }}</p>
+                
+                <hr>
+                
+                <h6>How to use your wallet:</h6>
+                <ul class="list-unstyled">
+                    <li><i class="fas fa-check text-success"></i> Add funds to your wallet</li>
+                    <li><i class="fas fa-check text-success"></i> Place bids on auctions</li>
+                    <li><i class="fas fa-check text-success"></i> Withdraw funds when needed</li>
+                    <li><i class="fas fa-check text-success"></i> Track all transactions</li>
+                </ul>
+                
+                <div class="alert alert-warning">
+                    <small>
+                        <i class="fas fa-exclamation-triangle"></i>
+                        <strong>Note:</strong> You can only place bids if you have sufficient balance in your wallet.
+                    </small>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}

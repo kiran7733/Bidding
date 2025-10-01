@@ -1,0 +1,109 @@
+{% extends 'base.html' %}
+
+{% block title %}Transaction History{% endblock %}
+
+{% block content %}
+<div class="row">
+    <div class="col-12">
+        <div class="card">
+            <div class="card-header d-flex justify-content-between align-items-center">
+                <h3><i class="fas fa-history"></i> Transaction History</h3>
+                <a href="{% url 'wallet' %}" class="btn btn-outline-primary">
+                    <i class="fas fa-arrow-left"></i> Back to Wallet
+                </a>
+            </div>
+            <div class="card-body">
+                <div class="alert alert-info">
+                    <i class="fas fa-info-circle"></i>
+                    <strong>Current Balance:</strong> {{ wallet.get_balance_display }}
+                </div>
+                
+                {% if page_obj %}
+                    <div class="table-responsive">
+                        <table class="table table-striped">
+                            <thead>
+                                <tr>
+                                    <th>Date & Time</th>
+                                    <th>Type</th>
+                                    <th>Amount</th>
+                                    <th>Balance After</th>
+                                    <th>Description</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                {% for transaction in page_obj %}
+                                <tr>
+                                    <td>{{ transaction.created_at|date:"M d, Y H:i" }}</td>
+                                    <td>
+                                        <span class="badge 
+                                            {% if transaction.transaction_type == 'deposit' %}bg-success
+                                            {% elif transaction.transaction_type == 'withdrawal' %}bg-danger
+                                            {% elif transaction.transaction_type == 'bid_placed' %}bg-warning
+                                            {% elif transaction.transaction_type == 'bid_refund' %}bg-info
+                                            {% elif transaction.transaction_type == 'auction_won' %}bg-primary
+                                            {% elif transaction.transaction_type == 'auction_sold' %}bg-success
+                                            {% else %}bg-secondary{% endif %}">
+                                            {{ transaction.get_transaction_type_display }}
+                                        </span>
+                                    </td>
+                                    <td>
+                                        {% if transaction.transaction_type == 'deposit' or transaction.transaction_type == 'bid_refund' or transaction.transaction_type == 'auction_sold' %}
+                                            <span class="text-success">+₹{{ transaction.amount }}</span>
+                                        {% else %}
+                                            <span class="text-danger">-₹{{ transaction.amount }}</span>
+                                        {% endif %}
+                                    </td>
+                                    <td>₹{{ transaction.balance_after }}</td>
+                                    <td>
+                                        {% if transaction.description %}
+                                            {{ transaction.description }}
+                                        {% else %}
+                                            <em class="text-muted">No description</em>
+                                        {% endif %}
+                                    </td>
+                                </tr>
+                                {% endfor %}
+                            </tbody>
+                        </table>
+                    </div>
+                    
+                    <!-- Pagination -->
+                    {% if page_obj.has_other_pages %}
+                        <nav aria-label="Transaction pagination">
+                            <ul class="pagination justify-content-center">
+                                {% if page_obj.has_previous %}
+                                    <li class="page-item">
+                                        <a class="page-link" href="?page=1">&laquo; First</a>
+                                    </li>
+                                    <li class="page-item">
+                                        <a class="page-link" href="?page={{ page_obj.previous_page_number }}">Previous</a>
+                                    </li>
+                                {% endif %}
+                                
+                                <li class="page-item active">
+                                    <span class="page-link">
+                                        Page {{ page_obj.number }} of {{ page_obj.paginator.num_pages }}
+                                    </span>
+                                </li>
+                                
+                                {% if page_obj.has_next %}
+                                    <li class="page-item">
+                                        <a class="page-link" href="?page={{ page_obj.next_page_number }}">Next</a>
+                                    </li>
+                                    <li class="page-item">
+                                        <a class="page-link" href="?page={{ page_obj.paginator.num_pages }}">Last &raquo;</a>
+                                    </li>
+                                {% endif %}
+                            </ul>
+                        </nav>
+                    {% endif %}
+                {% else %}
+                    <div class="alert alert-info">
+                        <i class="fas fa-info-circle"></i> No transactions found.
+                    </div>
+                {% endif %}
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}

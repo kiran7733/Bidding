@@ -31,6 +31,10 @@ class AuctionItemForm(forms.ModelForm):
         return starting_price
 
 class BidForm(forms.ModelForm):
+    def __init__(self, *args, **kwargs):
+        self.auction = kwargs.pop('auction', None)
+        super().__init__(*args, **kwargs)
+    
     class Meta:
         model = Bid
         fields = ['amount']
@@ -47,6 +51,18 @@ class BidForm(forms.ModelForm):
         amount = self.cleaned_data['amount']
         if amount <= 0:
             raise forms.ValidationError("Bid amount must be greater than 0.")
+        
+        # Check minimum bid if auction is provided
+        if self.auction:
+            current_highest = self.auction.bids.filter(is_deleted=False).order_by('-amount').first()
+            if current_highest:
+                min_bid = current_highest.amount + 1
+            else:
+                min_bid = self.auction.starting_price
+            
+            if amount < min_bid:
+                raise forms.ValidationError(f"Bid amount must be at least ₹{min_bid}.")
+        
         return amount
 
 class ExtendTimeForm(forms.Form):

@@ -42,12 +42,30 @@ class AuctionItem(models.Model):
         return reverse('auction_detail', kwargs={'pk': self.pk})
     
     def is_active(self):
-        return self.status == 'active' and timezone.now() < self.end_time
+        return self.status in ['active', 'extended'] and timezone.now() < self.end_time
     
     def time_remaining(self):
         if self.end_time > timezone.now():
             return self.end_time - timezone.now()
         return None
+    
+    def get_time_remaining_display(self):
+        """Get a human-readable time remaining string"""
+        time_left = self.time_remaining()
+        if not time_left:
+            return None
+        
+        total_seconds = int(time_left.total_seconds())
+        days = total_seconds // 86400
+        hours = (total_seconds % 86400) // 3600
+        minutes = (total_seconds % 3600) // 60
+        
+        if days > 0:
+            return f"{days} day{'s' if days != 1 else ''} remaining"
+        elif hours > 0:
+            return f"{hours} hour{'s' if hours != 1 else ''} remaining"
+        else:
+            return f"{minutes} minute{'s' if minutes != 1 else ''} remaining"
     
     def update_current_price(self):
         highest_bid = self.bids.filter(is_deleted=False).order_by('-amount').first()
@@ -78,19 +96,6 @@ class AuctionItem(models.Model):
         # Allow image updates anytime for seller
         return True
 
-
-class Bid(models.Model):
-    item = models.ForeignKey(AuctionItem, on_delete=models.CASCADE, related_name='bids')
-    bidder = models.ForeignKey(User, on_delete=models.CASCADE)
-    amount = models.DecimalField(max_digits=10, decimal_places=2)
-    timestamp = models.DateTimeField(default=timezone.now)
-    is_deleted = models.BooleanField(default=False)
-    deleted_at = models.DateTimeField(null=True, blank=True)
-    
-    def __str__(self):
-        status = " (Deleted)" if self.is_deleted else ""
-        return f"${self.amount} on {self.item.title} by {self.bidder.username}{status}"
-    
     def can_be_deleted_by_seller(self):
         """Check if auction can be deleted by seller within 10 minutes"""
         if self.status != 'active':
@@ -106,8 +111,47 @@ class Bid(models.Model):
         # Can delete if within time limit AND no bids
         return within_time_limit and not has_bids
 
+    @property
+    def can_be_deleted_by_seller_property(self):
+        """Property version for template access"""
+        return self.can_be_deleted_by_seller()
+
+    @property
+    def can_extend_time_property(self):
+        """Property version for template access"""
+        return self.can_extend_time()
 
 
+class Bid(models.Model):
+    item = models.ForeignKey(AuctionItem, on_delete=models.CASCADE, related_name='bids')
+    bidder = models.ForeignKey(User, on_delete=models.CASCADE)
+    amount = models.DecimalField(max_digits=10, decimal_places=2)
+    timestamp = models.DateTimeField(default=timezone.now)
+    is_deleted = models.BooleanField(default=False)
+    deleted_at = models.DateTimeField(null=True, blank=True)
+    
+    def __str__(self):
+        status = " (Deleted)" if self.is_deleted else ""
+        return f"₹{self.amount} on {self.item.title} by {self.bidder.username}{status}"
+    
+    def can_be_deleted(self):
+        """Check if bid can be deleted by bidder"""
+        # Can't delete if it's the highest bid
+        if self == self.item.bids.filter(is_deleted=False).order_by('-amount').first():
+            return False
+        
+        # Can't delete if auction is not active
+        if not self.item.is_active():
+            return False
+        
+        # Can delete within 5 minutes of placing the bid
+        time_limit = self.timestamp + timezone.timedelta(minutes=5)
+        return timezone.now() < time_limit
+
+    @property
+    def can_be_deleted_property(self):
+        """Property version for template access"""
+        return self.can_be_deleted()
     
     def soft_delete(self):
         self.is_deleted = True

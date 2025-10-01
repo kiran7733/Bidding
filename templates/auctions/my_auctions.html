@@ -38,8 +38,8 @@
                         <h5 class="card-title">{{ auction.title }}</h5>
                         <p class="card-text">{{ auction.description|truncatewords:10 }}</p>
                         <p class="card-text">
-                            <strong>Current Bid: ${{ auction.current_price }}</strong><br>
-                            <small class="text-muted">Starting Price: ${{ auction.starting_price }}</small>
+                            <strong>Current Bid: ₹{{ auction.current_price }}</strong><br>
+                            <small class="text-muted">Starting Price: ₹{{ auction.starting_price }}</small>
                         </p>
                         
                         {% if auction.status == 'active' %}
@@ -50,9 +50,9 @@
                         <span class="badge bg-info">Extended</span>
                         {% endif %}
                         
-                        {% if auction.time_remaining %}
+                        {% if auction.get_time_remaining_display %}
                         <p class="text-warning mt-2">
-                            <i class="fas fa-clock"></i> {{ auction.time_remaining.days }} days remaining
+                            <i class="fas fa-clock"></i> {{ auction.get_time_remaining_display }}
                         </p>
                         {% elif auction.status == 'closed' %}
                         <p class="text-muted mt-2">
@@ -125,7 +125,7 @@
                         <h5 class="card-title">{{ auction.title }}</h5>
                         <p class="card-text">{{ auction.description|truncatewords:10 }}</p>
                         <p class="card-text">
-                            <strong>Current Bid: ${{ auction.current_price }}</strong><br>
+                            <strong>Current Bid: ₹{{ auction.current_price }}</strong><br>
                             <small class="text-muted">Seller: {{ auction.seller.username }}</small>
                         </p>
 
@@ -168,7 +168,7 @@
                         <h5 class="card-title">{{ auction.title }} <i class="fas fa-trophy text-warning"></i></h5>
                         <p class="card-text">{{ auction.description|truncatewords:10 }}</p>
                         <p class="card-text">
-                            <strong>Winning Bid: ${{ auction.current_price }}</strong><br>
+                            <strong>Winning Bid: ₹{{ auction.current_price }}</strong><br>
                             <small class="text-muted">Seller: {{ auction.seller.username }}</small>
                         </p>
                         <span class="badge bg-success">Won</span>

@@ -53,7 +53,7 @@
                 <p class="card-text">{{ auction.description|truncatewords:15 }}</p>
                 <div class="mt-auto">
                     <p class="card-text">
-                        <strong>Current Bid: ${{ auction.current_price }}</strong><br>
+                        <strong>Current Bid: ₹{{ auction.current_price }}</strong><br>
                         <small class="text-muted">by {{ auction.seller.username }}</small>
                     </p>
                     {% if auction.time_remaining %}
