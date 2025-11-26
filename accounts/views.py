@@ -30,7 +30,6 @@ def wallet_view(request):
     """Display user's wallet and transaction history"""
     wallet, created = Wallet.objects.get_or_create(user=request.user)
     
-    # Get recent transactions
     transactions = wallet.transactions.all()[:10]
     
     context = {
@@ -48,12 +47,10 @@ def add_funds(request):
         form = AddFundsForm(request.POST)
         if form.is_valid():
             amount = form.cleaned_data['amount']
-            # Razorpay uses paise. Convert ₹ to paise
             amount_paise = int(amount * 100)
             client = razorpay.Client(auth=(settings.RAZORPAY_KEY_ID, settings.RAZORPAY_KEY_SECRET))
             rzp_order = client.order.create(dict(amount=amount_paise, currency='INR', payment_capture=1))
             
-            # Save a pending WalletPayment
             WalletPayment.objects.create(
                 user=request.user,
                 amount=amount,
@@ -99,15 +96,12 @@ def verify_payment(request):
         client = razorpay.Client(auth=(settings.RAZORPAY_KEY_ID, settings.RAZORPAY_KEY_SECRET))
         client.utility.verify_payment_signature(params_dict)
     except razorpay.errors.SignatureVerificationError:
-        # Mark failed
         WalletPayment.objects.filter(order_id=params_dict['razorpay_order_id']).update(status='failed')
         messages.error(request, 'Payment verification failed.')
         return redirect('add_funds')
     
-    # Signature valid: credit wallet
     payment = WalletPayment.objects.select_for_update().get(order_id=params_dict['razorpay_order_id'])
     if payment.status == 'success':
-        # Idempotent
         messages.success(request, 'Payment already processed.')
         return redirect('wallet')
     
@@ -142,10 +136,8 @@ def withdraw_funds(request):
             
             try:
                 with transaction.atomic():
-                    # Deduct funds from wallet
                     new_balance = wallet.deduct_funds(amount)
                     
-                    # Create transaction record
                     WalletTransaction.objects.create(
                         wallet=wallet,
                         transaction_type='withdrawal',
@@ -173,7 +165,6 @@ def transaction_history(request):
     """Display full transaction history"""
     wallet, created = Wallet.objects.get_or_create(user=request.user)
     
-    # Paginate transactions
     transactions = wallet.transactions.all()
     paginator = Paginator(transactions, 20)
     page_number = request.GET.get('page')

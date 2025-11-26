@@ -79,7 +79,6 @@ class AuctionItem(models.Model):
         return self.status == 'active' and self.time_extensions < 3
     def can_be_managed_by_seller(self):
         """Check if auction can be managed by seller"""
-        # Sellers can always manage their auctions, but some actions may be restricted
         return True
 
     def can_be_ended_early(self):
@@ -88,12 +87,10 @@ class AuctionItem(models.Model):
 
     def can_modify_description(self):
         """Check if description can be modified"""
-        # Allow description updates anytime for seller
         return True
 
     def can_modify_image(self):
         """Check if image can be modified"""
-        # Allow image updates anytime for seller
         return True
 
     def can_be_deleted_by_seller(self):
@@ -101,14 +98,11 @@ class AuctionItem(models.Model):
         if self.status != 'active':
             return False
     
-        # Allow deletion within 10 minutes of creation
         time_limit = self.created_at + timezone.timedelta(minutes=10)
         within_time_limit = timezone.now() < time_limit
     
-        # Check if there are any bids
         has_bids = self.bids.filter(is_deleted=False).exists()
     
-        # Can delete if within time limit AND no bids
         return within_time_limit and not has_bids
 
     @property
@@ -136,15 +130,12 @@ class Bid(models.Model):
     
     def can_be_deleted(self):
         """Check if bid can be deleted by bidder"""
-        # Can't delete if it's the highest bid
         if self == self.item.bids.filter(is_deleted=False).order_by('-amount').first():
             return False
         
-        # Can't delete if auction is not active
         if not self.item.is_active():
             return False
         
-        # Can delete within 5 minutes of placing the bid
         time_limit = self.timestamp + timezone.timedelta(minutes=5)
         return timezone.now() < time_limit
 

@@ -57,12 +57,27 @@ TEMPLATES = [
 WSGI_APPLICATION = 'auction_site.wsgi.application'
 
 # Database
+
+
 DATABASES = {
     'default': {
         'ENGINE': 'django.db.backends.sqlite3',
         'NAME': BASE_DIR / 'db.sqlite3',
     }
 }
+
+
+# DATABASES = {
+#     'default': {
+#         'ENGINE': 'django.db.backends.postgresql',
+#         'NAME': os.environ.get('RDS_DB_NAME', 'onlinebidding'),
+#         'USER': os.environ.get('RDS_USERNAME', 'postgre'),
+#         'PASSWORD': os.environ.get('RDS_PASSWORD', 'onlinebidding12345'),
+#         'HOST': os.environ.get('RDS_HOSTNAME', 'onlinebidding.csfcsyq6i9y9.us-east-1.rds.amazonaws.com'),
+#         'PORT': os.environ.get('RDS_PORT', '5432'),
+#     }
+# }
+
 
 # Password validation
 AUTH_PASSWORD_VALIDATORS = [
@@ -83,10 +98,9 @@ AUTH_PASSWORD_VALIDATORS = [
 # Internationalization
 LANGUAGE_CODE = 'en-us'
 
-# Fix timezone issues - Set to your local timezone
-TIME_ZONE = 'Asia/Kolkata'  # Change this to your timezone
+TIME_ZONE = 'Asia/Kolkata'
 USE_I18N = True
-USE_TZ = True  # Keep this True for timezone-aware datetimes
+USE_TZ = True
 
 # Static files (CSS, JavaScript, Images)
 STATIC_URL = '/static/'
@@ -110,12 +124,9 @@ LOGIN_URL = '/accounts/login/'
 LOGIN_REDIRECT_URL = '/'
 LOGOUT_REDIRECT_URL = '/'
 
-# Date and time format settings
 DATETIME_FORMAT = 'M d, Y H:i'
 DATE_FORMAT = 'M d, Y'
 TIME_FORMAT = 'H:i'
 
-# Razorpay credentials (TEST KEYS)
-# For production, move these to environment variables
 RAZORPAY_KEY_ID = 'rzp_test_ROBzPCRj4IeRS7'
 RAZORPAY_KEY_SECRET = 'eTphv1F6IvcHxIN02RkjLgwn'

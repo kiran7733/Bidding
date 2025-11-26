@@ -15,7 +15,7 @@ from accounts.models import Wallet, WalletTransaction
 def auto_close_expired_auctions():
     """Helper function to auto-close expired auctions"""
     expired_auctions = AuctionItem.objects.filter(
-        status__in=['active', 'extended'],  # Include both active and extended auctions
+        status__in=['active', 'extended'],
         end_time__lte=timezone.now()
     )
     
@@ -24,7 +24,6 @@ def auto_close_expired_auctions():
         highest_bid = auction.bids.filter(is_deleted=False).order_by('-amount').first()
         if highest_bid:
             auction.winner = highest_bid.bidder
-            # Credit seller wallet with winning amount
             try:
                 from accounts.models import Wallet, WalletTransaction
                 from django.db import transaction as dbtx
@@ -39,7 +38,6 @@ def auto_close_expired_auctions():
                         description=f'Auction sold: {auction.title}'
                     )
             except Exception:
-                # Avoid breaking auto-close if wallet credit fails; could log this
                 pass
         auction.save()
     
@@ -47,10 +45,8 @@ def auto_close_expired_auctions():
 
 
 def home(request):
-    # Auto-close expired auctions first
     auto_close_expired_auctions()
     
-    # Get active auctions
     active_auctions = AuctionItem.objects.filter(
         status__in=['active', 'extended'],
         end_time__gt=timezone.now()
@@ -58,7 +54,6 @@ def home(request):
     
     categories = Category.objects.all()
     
-    # Get some statistics
     total_auctions = AuctionItem.objects.filter(status__in=['active', 'extended']).count()
     total_bids = Bid.objects.filter(is_deleted=False).count()
     
@@ -72,33 +67,27 @@ def home(request):
 
 
 def auction_list(request):
-    # Auto-close expired auctions before displaying
     auto_close_expired_auctions()
     
-    # Get active auctions
     auctions = AuctionItem.objects.filter(
         status__in=['active', 'extended'],
         end_time__gt=timezone.now()
     ).order_by('-created_at')
     
-    # Search functionality
     query = request.GET.get('q')
     if query:
         auctions = auctions.filter(
             Q(title__icontains=query) | Q(description__icontains=query)
         )
     
-    # Category filter
     category_id = request.GET.get('category')
     if category_id:
         auctions = auctions.filter(category_id=category_id)
     
-    # Sorting
     sort_by = request.GET.get('sort', '-created_at')
     if sort_by in ['-created_at', 'current_price', '-current_price', 'end_time']:
         auctions = auctions.order_by(sort_by)
     
-    # Pagination
     paginator = Paginator(auctions, 12)
     page_number = request.GET.get('page')
     page_obj = paginator.get_page(page_number)
@@ -118,29 +107,23 @@ def auction_list(request):
 def auction_detail(request, pk):
     auction = get_object_or_404(AuctionItem, pk=pk)
     
-    # Auto-close expired auctions
     auto_close_expired_auctions()
     
-    # Refresh auction object in case it was updated
     auction.refresh_from_db()
     
-    # Get valid bids only
     bids = auction.bids.filter(is_deleted=False).order_by('-timestamp')[:10]
     user_bids = None
     user_highest_bid = None
     current_highest_bid = None
     
-    # Get the current highest bid
     current_highest_bid = auction.bids.filter(is_deleted=False).order_by('-amount').first()
     
-    # Calculate minimum bid for display
     if current_highest_bid:
         min_bid_amount = current_highest_bid.amount + 1
     else:
         min_bid_amount = auction.starting_price
     
     if request.user.is_authenticated:
-        # Get ALL user's bids for this auction (not deleted)
         user_bids = auction.bids.filter(bidder=request.user, is_deleted=False).order_by('-timestamp')
         user_highest_bid = user_bids.first()
     
@@ -174,21 +157,16 @@ def place_bid(request, pk):
         if form.is_valid():
             bid_amount = form.cleaned_data['amount']
             
-            # Form validation already checks minimum bid, so we can proceed
-            # Get user's wallet (create if doesn't exist)
             wallet, created = Wallet.objects.get_or_create(user=request.user)
             
-            # Check if user has sufficient balance
             if not wallet.has_sufficient_balance(bid_amount):
                 messages.error(request, f'Insufficient wallet balance. You need ₹{bid_amount} but have ₹{wallet.balance}. Please add funds to your wallet.')
                 return redirect('auction_detail', pk=pk)
             
             try:
                 with transaction.atomic():
-                    # Deduct funds from wallet
                     new_balance = wallet.deduct_funds(bid_amount)
                     
-                    # Create transaction record
                     WalletTransaction.objects.create(
                         wallet=wallet,
                         transaction_type='bid_placed',
@@ -197,14 +175,12 @@ def place_bid(request, pk):
                         description=f'Bid placed on {auction.title}'
                     )
                     
-                    # Create new bid
                     Bid.objects.create(
                         item=auction,
                         bidder=request.user,
                         amount=bid_amount
                     )
                     
-                    # Update auction current price
                     auction.current_price = bid_amount
                     auction.save()
                     
@@ -212,9 +188,6 @@ def place_bid(request, pk):
                     
             except ValueError as e:
                 messages.error(request, f'Error processing bid: {str(e)}')
-        else:
-            # Form validation errors will be displayed
-            pass
     
     return redirect('auction_detail', pk=pk)
 
@@ -223,26 +196,21 @@ def place_bid(request, pk):
 def delete_bid(request, bid_id):
     bid = get_object_or_404(Bid, id=bid_id, bidder=request.user, is_deleted=False)
     
-    # Check if auction is still active
     if not bid.item.is_active():
         messages.error(request, 'Cannot delete bids on inactive auctions.')
         return redirect('auction_detail', pk=bid.item.pk)
     
     if request.method == 'POST':
-        # Check if bid can be deleted at the time of deletion
         if not bid.can_be_deleted():
             messages.error(request, 'This bid cannot be deleted. Either the time limit has exceeded or it\'s currently the highest bid.')
             return redirect('auction_detail', pk=bid.item.pk)
         
         try:
             with transaction.atomic():
-                # Get user's wallet (create if doesn't exist)
                 wallet, created = Wallet.objects.get_or_create(user=request.user)
                 
-                # Refund the bid amount
                 new_balance = wallet.add_funds(bid.amount)
                 
-                # Create transaction record for refund
                 WalletTransaction.objects.create(
                     wallet=wallet,
                     transaction_type='bid_refund',
@@ -251,7 +219,6 @@ def delete_bid(request, bid_id):
                     description=f'Bid refund for {bid.item.title}'
                 )
                 
-                # Perform soft delete
                 bid.soft_delete()
                 messages.success(request, f'Your bid of ₹{bid.amount} has been successfully deleted and refunded to your wallet.')
                 
@@ -261,7 +228,6 @@ def delete_bid(request, bid_id):
         
         return redirect('auction_detail', pk=bid.item.pk)
     
-    # Show confirmation page
     context = {
         'bid': bid,
         'can_delete': bid.can_be_deleted(),
@@ -274,7 +240,6 @@ def delete_bid(request, bid_id):
 def extend_auction_time(request, pk):
     auction = get_object_or_404(AuctionItem, pk=pk)
     
-    # Only allow the auction seller/owner to extend time
     if request.user != auction.seller:
         messages.error(request, 'Only the auction owner can extend auction time.')
         return redirect('auction_detail', pk=pk)
@@ -292,7 +257,6 @@ def extend_auction_time(request, pk):
             old_end_time = auction.end_time
             new_end_time = auction.end_time + timedelta(hours=extension_hours)
             
-            # Create extension record
             AuctionExtension.objects.create(
                 auction=auction,
                 extended_by=request.user,
@@ -301,7 +265,6 @@ def extend_auction_time(request, pk):
                 extension_reason=reason
             )
             
-            # Update auction
             auction.end_time = new_end_time
             auction.time_extensions += 1
             if auction.time_extensions > 0:
@@ -358,7 +321,6 @@ def create_auction(request):
 
 @login_required
 def my_auctions(request):
-    # Auto-close expired auctions first
     auto_close_expired_auctions()
     
     selling = AuctionItem.objects.filter(seller=request.user).order_by('-created_at')
@@ -376,13 +338,11 @@ def my_auctions(request):
     return render(request, 'auctions/my_auctions.html', context)
 
 
-# Additional utility views for AJAX functionality (optional)
 @login_required
 def get_auction_status(request, pk):
     """AJAX endpoint to get real-time auction status"""
     auction = get_object_or_404(AuctionItem, pk=pk)
     
-    # Auto-close if expired
     if auction.status == 'active' and timezone.now() >= auction.end_time:
         auction.status = 'closed'
         highest_bid = auction.bids.filter(is_deleted=False).order_by('-amount').first()
